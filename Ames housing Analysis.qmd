@@ -1,0 +1,721 @@
+---
+title: "Project 2: Driving Factors of Housing Prices in Iowa"
+author: "Md Boshirl Azad"
+date: "Spring 2026"
+format:
+  html:
+    theme: pulse
+    fontsize: .85em
+    linestretch: 1.5
+    toc: true
+    toc-expand: 2
+    toc-location: body
+    toc-title: Table of Contents
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r Themes}
+# To change look and feel, you can simply adjust themes. 
+# Here is a reference. Simply replace 'simplex' with one of these names:
+# https://quarto.org/docs/output-formats/html-themes.html
+
+```
+
+```{r}
+#| label: setup
+#| include: false
+
+# ---- Global options ----
+options(stringsAsFactors = FALSE)
+set.seed(42)
+
+# ---- Libraries ----
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(janitor)
+library(forcats)
+library(patchwork)
+library(gt)
+library(skimr)
+library(rlang)
+library(ggcorrplot)
+
+# ---- Optional: custom functions ----
+source("CS217_Functions.R")
+   # uncomment if you have helper functions
+```
+
+
+# I. Define the Problem or Question
+
+```{r}
+
+#READ THIS: https://ideawake.com/wp-content/uploads/2017/10/Problem-Statements.pdf
+
+```
+
+**Purpose:** \What is the purpose of the analysis?\
+
+*Ans:* \This analysis demonstrates the influential factors that affect the housing prices in Iowa.
+
+**Audience:** \ Who is this for?\
+*Ans:* \ This analysis is important for the individuals who are in real-estate, home investors and buy property like houses, and for the prospective buyers of Iowa.]
+
+**Decision:** \ What decision will this inform?\
+*Ans:* \ This informs real estate agencies and agents, investors, and future buyers whether to buy a house and which area is a better option to purchase. If there is anything that can be updated to improve the housing price.
+
+**Success criteria:** \ How will we know we answered the question?\
+*Ans:* \At the end of this analysis, we should have proper overview of the important factors that are influencing the prices. After identifying the factors with proper evidence, we should have answer to the question. 
+
+# II. Data & Analytic Approach
+
+**Approach overview:**
+
+-   \[What data is used?\]
+-   \[We are using the Ames Housing data set. It provides information about the essential details needed to do the analysis.]
+
+-   \[What techniques will you use (EDA, hypothesis tests, modeling, etc.)?\]
+-   \[After collecting the data, we are going to clean the data set and define it as raw data eng from raw data. We are going
+
+to create new columns like total_SF, total_rms, total_bsmt, date_sold, total_bath, total_porch, total_sale_p. We used our new
+
+columns to make tables, scatter plots, bar plots, box plots, correlation, and plotting regression lines. These new charts and 
+are going to work as evidence for our analysis.]
+
+-   \[Any constraints: time, missing fields, quality limits?\]
+-   \[ This data set has all information to make the analysis meaningful. So far their are no missing constraints that might 
+
+impact the analysis.]
+
+## Collect Data
+
+### Data dictionary (ACTION: FILL IN)
+
+-   **Unit of analysis:** \[row represents each individual house sold in different neighborhoods in Iowa\]
+
+-   **Key outcomes/metrics:** \[numeric cols: Sale_Price, Overall_Qual, total_SF, total_rms, House_age\]
+
+-   **Key segmentations:** \[categorical cols: Neighborhood, House_Style\]
+
+-   **Time field(s):** \[date/datetime cols: Year_sold, Year_Built, Mo_Sold\]
+
+### Load Data
+```{r}
+
+library(AmesHousing)
+raw_data <- make_ames()
+
+
+```
+
+```{r}
+#| label: load_data
+#Load data
+
+
+# Option A: read a local CSV (recommended for reproducible renders)
+# raw_data <- read_csv("raw_data")
+
+# Option B: pick a file interactively (not reproducible in render)
+# raw_data <- read_csv(file.choose())
+
+# Placeholder example to prevent render errors if you haven't loaded data yet:
+#raw_data <- tibble()
+```
+
+### Quick Sanity Checks
+
+```{r}
+#| label: quick_checks
+
+if (nrow(raw_data) > 0) {
+  raw_data %>% glimpse()
+  raw_data %>% head(10)
+  # Missingness overview
+  raw_data %>% summarise(across(everything(), ~sum(is.na(.)))) %>% t()
+}
+
+```
+
+## Clean Data
+
+### Standardize Names + Types
+
+```{r}
+#| label: clean_data
+
+# if (nrow(raw_data) > 0) {
+# 
+#   raw_data <- raw_data %>%
+#     clean_names() %>% 
+#     # ---- EDIT BELOW: convert key types ----
+#     mutate(
+#       # example:
+#       # date = as.Date(date_col),
+#       # category = as.factor(category),
+#       # region = as.factor(region)
+#     )
+# 
+# } else {
+#   raw_data <- raw_data
+# }
+```
+
+### Handle missing values / invalid values
+
+```{r}
+#| label: missing_values
+
+if (nrow(raw_data) > 0) {
+
+  # 1) quantify missingness
+  na_counts <- raw_data %>% summarise(across(everything(), ~sum(is.na(.)))) %>% pivot_longer(everything())
+  na_counts %>% arrange(desc(value)) %>% head(25)
+
+  # 2) choose a strategy (examples below)
+  # raw_data <- raw_data %>% drop_na(key_column)
+  # raw_data <- raw_data %>% mutate(numeric_col = replace_na(numeric_col, 0))
+}
+```
+
+### Create calculated fields (feature engineering)
+
+```{r}
+#| label: feature_engineering
+ raw_data_eng <- raw_data %>%
+      
+               mutate(
+                 total_SF = Total_Bsmt_SF + First_Flr_SF + Second_Flr_SF + Low_Qual_Fin_SF,
+                 
+                 date_sold = as.Date(paste0(Year_Sold, "-", Mo_Sold, "-01"), "%Y-%m-%d"),
+                 
+                 house_age = Year_Sold - Year_Built,
+                 
+                 total_bath = Full_Bath + (0.5 * Half_Bath) + Bsmt_Full_Bath + (Bsmt_Half_Bath *0.5),
+                 
+                 total_rooms = Bedroom_AbvGr,
+                 
+                 total_porch = Open_Porch_SF + Enclosed_Porch + Screen_Porch,
+                 
+                 total_bsmt = BsmtFin_SF_1 + BsmtFin_SF_2 +Bsmt_Unf_SF,
+                 
+                 total_sale_p = Sale_Price
+               )
+
+raw_data_eng 
+
+tb_raw_data_eng <- raw_data_eng %>%
+  
+                  select(total_SF, date_sold, house_age, total_bath, total_rooms, total_porch, total_bsmt)%>%
+                  arrange(desc(total_SF)) %>%
+                  gt()
+
+tb_raw_data_eng
+```
+
+# III. Explore data
+
+### Dataset-wide profiling (skimr)
+
+```{r}
+#| label: skim_overview
+library(skimr)
+skimr::skim(raw_data)
+
+```
+
+### Core summary tables (edit groupings and metrics)
+
+```{r}
+#| label: summary_tables
+
+avg_nd <- raw_data_eng %>%
+  
+          group_by(Neighborhood) %>%
+  
+          summarise(avg_sf = mean(total_SF),
+                  
+                  avg_price = mean(Sale_Price),
+                  
+                  count = n() 
+                  
+          ) %>%
+                  arrange(desc(avg_price))
+
+tb_avg_nd <- avg_nd %>% gt()
+
+tb_avg_nd
+
+```
+```{r}
+avg_hstyle <- raw_data_eng %>%
+  
+          group_by(House_Style) %>%
+  
+          summarise(avg_sf = mean(total_SF),
+                  
+                  avg_price = mean(Sale_Price),
+                  
+                  count = n() 
+                  
+          ) %>% 
+
+                 arrange(desc(avg_price))
+  
+                  
+
+tb_avg_hstyle <- avg_hstyle %>%  gt()
+
+tb_avg_hstyle
+
+
+
+```
+Findings:
+
+- Two story house has higher average sale price of $206990.2.	
+
+- One story houses has lower avg price of $178699.9.
+
+- There are different house stlyes like One_and_Half_Fin,SLvl and some others but there quantity sold and avg price is less reliable to go to conclusion. 
+```{r}
+avg_sales_condtion <- raw_data_eng %>%
+  
+          group_by(Overall_Qual) %>%
+  
+          summarise(avg_sf = mean(total_SF),
+                  
+                  avg_price = mean(Sale_Price),
+                  
+                  count = n() 
+                  
+          ) %>%
+                 arrange(desc(avg_price))
+
+tb_avg_sales_condtion <- avg_sales_condtion %>% gt()
+
+tb_avg_sales_condtion
+
+```
+Findings:
+
+- The better the quality the more the avg price is.
+
+- For very excellent and excellent quality on avg the selling price is between around $35K-$45K
+
+- The good, above average, and average house were sold the most and their avg price were between $13K-$20k
+
+- The fair, poor, and very poor quality houses were sold in a negligible amount. 
+### Numeric distributions
+
+```{r}
+#| label: numeric_distributions
+numeric_plots <- plot_numeric_distributions(data = raw_data_eng, 
+                           hist_color = "pink", 
+                           dens_color = "skyblue")
+
+
+numeric_plots
+
+
+```
+Findings:
+
+- Sale Price is skewed right. Most of the price are influenced by lower mid range to upper-mid range house and there are some outliers that indicates there are some expensive transaction but they are rare.
+
+- Total surface area is also skewed right. It indicates that most houses has moderate area with some rare houses with big area exists. It shows that size is a important factor to influence prices.
+
+- Rest of the details shows little to less influence and doesn't play any important role to add any difference in sale price.
+
+### Comapre quantiy of categories(barplot)
+
+# Number of Houses in Neighborhood
+
+```{r}
+
+barplot_nd <- barplot(table(raw_data_eng$Neighborhood),
+                      
+                      col = "BLUE",
+                      
+                      main = "Number of Houses in Neighborhood")
+```
+Finding:
+
+- Out in North Ames, homes pop up more than anywhere else. Meanwhile, some parts show only a handful of houses, making it 
+
+tricky to draw solid conclusions about them. Fewer records mean less certainty when looking at those spots.
+
+## Quantity of houses based on Quality
+```{r}
+barplot_nd <- barplot(table(raw_data_eng$Overall_Qual),
+                      
+                      col = "VIOLET",
+                      
+                      main = "Number of Houses by Quality")
+```
+Findings:
+
+- The distribution of house quality is clustered in the “Average” and “Good” categories, with very few houses classified as “Very Poor” or “Excellent.” This suggests that most houses fall within mid-level quality ranges, while extreme 
+categories have limited representation and may have less impact on overall analysis.
+
+### Compare numeric metric by category (scattered plot)
+
+## Visualization of Sale price by Size
+
+```{r}
+splot_sf_sp <- plot(raw_data_eng$total_SF, raw_data_eng$Sale_Price,
+                    
+                    main = " Influence of Area on Price",
+                    
+                    xlab = "Total Area",
+                    
+                    ylab = "Price",
+                    
+                    col = "blue")
+```
+Findings:
+
+- This scattered plot shows a strong positive correlation between the area and price.
+
+## Visualization of Sale price by House Age
+
+```{r}
+splot_quality_sp <- plot(raw_data_eng$house_age, raw_data_eng$Sale_Price,
+                    
+                    main = " Influence of Age on Price",
+                    
+                    xlab = "House Age",
+                    
+                    ylab = "Price",
+                    
+                    col = "blue")
+```
+Findings:
+
+- This scattered plot shows negative correlation between house age and price. Even though its negative, its weak.
+
+## Visualization of Sale Price by Number of Rooms
+
+```{r}
+splot_rooms_sp <- plot(raw_data_eng$total_rooms, raw_data_eng$Sale_Price,
+                    
+                    main = " Influence of Room Quantity on Price",
+                    
+                    xlab = "Number of Rooms",
+                    
+                    ylab = "Price",
+                    
+                    col = "blue")
+```
+Finding:
+
+- This scattered plot shows positive relation between number of rooms and price, but the correlation is weak. It highlights that number of rooms doesn't affect housing prices that much.
+
+### Compare numeric metric by category (boxplot)
+## Top Neighborhood by Price
+
+```{r}
+top5_nd_plot<- raw_data_eng %>% 
+  
+              group_by(Neighborhood) %>%
+  
+              summarise(avg_price = mean(Sale_Price)) %>%
+  
+              arrange(desc(avg_price)) %>% 
+  
+              head(5)
+
+ top5_nd_names <- top5_nd_plot $Neighborhood
+              
+bplot_nd <- boxplot( Sale_Price ~ Neighborhood, data = subset(raw_data_eng, Neighborhood %in% top5_nd_names),
+                     
+                     main = "Sale Price by Neighborhood",
+                     
+                     col = "purple")
+
+# unique(raw_data_eng$Neighborhood)
+```
+Finding:
+
+- This plot indicates that location plays important role when it comes to pricing.
+
+- Neighborhoods like Northridge and Gilbert shows more variation in prices and other have lower variation, which indicates lower cost of housing.
+
+##Price by House Style
+```{r}
+bplot_house_style <- boxplot( Sale_Price ~ House_Style,data = raw_data_eng,
+                             
+                             main = "Price by House Style",
+                             
+                             col = "purple")
+```
+Finding:
+
+- Housing style doesn't affect the house prices that much. Almost all house types have the same variation in prices. When analyzed deeply, one-story and two-story houses are more spread out and have more outliers, and it is an indication of more sale prices.
+##Price by Quality
+```{r}
+bplot_quality <- boxplot(Sale_Price ~ Overall_Qual, data = raw_data_eng,
+                         
+                         main = "Price by House Quality",
+                         
+                         col = "purple")
+```
+Finding:
+
+- This plots shows a very strong relation between house quality and price. 
+- The further the plot goes the more variation can be seen and this is a indication of strong influence of quality on house prices.
+### Compare numeric metric by category (bar summary)
+## Top 10 Neighborhood by Price
+
+```{r}
+#| label: boxplots_by_category
+
+
+top10_nd <- bar_summary(data = raw_data_eng, 
+            group_by_col = Neighborhood , 
+            numeric_col = Sale_Price, 
+            title=" Price By Neighborhood", 
+            subtitle = "Top 10 Neighborhood",
+            top_n = 10,
+            fill_color = "purple")
+
+
+top10_nd
+# Sale <- sum(raw_data_eng$Sale_Price)
+
+```
+Findings:
+
+- TThe bar chart shows that "Other," meaning a combination of different neighborhoods, has the largest share of market value by volume. This info is not important when it comes to analyzing on an individual level since it is an aggregation of multiple neighborhoods.
+
+- The North Ames, College Creek, and Northridge Heights neighborhoods have most of the market activity. They have most of the market cap, but it doesn't indicate they have more expensive houses; it rather indicates they have a larger number of houses being sold.
+## Top 10 House Prices by Quality
+
+```{r}
+top10_quality <- bar_summary(data = raw_data_eng, 
+            group_by_col = Overall_Qual , 
+            numeric_col = Sale_Price, 
+            title=" Price By Quality", 
+            subtitle = "Top 10 House Price By Quality",
+            top_n = 10,
+            fill_color = "purple")
+
+top10_quality
+```
+Finding:
+
+- Most of the market activity is concentrated around "Good", "Above Average", "Average", "Very Good". 
+- "Very Excellent" and "Excellent" have higher house prices but their selling quantity is low compared to the top ones in market share.
+- "Fair", "Poor", "Very Poor" have lowest market share but has low house prices.
+
+## Top 10 House Price(sold) by House Style
+
+```{r}
+top_house_style <- bar_summary(data = raw_data_eng,
+                                 
+                                 group_by_col = House_Style,
+                                 
+                                 numeric_col = Sale_Price,
+                                 
+                                 title = " Prices by House Style",
+                                 
+                                 subtitle = "Top House Style by Saleing Price",
+                                 
+                                 fill_color = "purple"
+                                 )
+top_house_style
+```
+Finding:
+
+- The chart shows that one story and two story houses dominate most of the market share. Compared to those, other housing styles doesn't do any significant effect. This shows house style only effects the market popularity not the price.
+
+### Visualization by Preto
+
+```{r}
+pareto_rev_by_prod <- plot_pareto_graph(raw_data_eng, 
+                  group_by_col = Neighborhood, 
+                  numeric_col = Sale_Price , 
+                  color_var = "cornflowerblue", 
+                  color_var_hline = "orange")
+ 
+pareto_rev_by_prod
+
+```
+Finding:
+
+- The pareto chart show a strong concentration of market share in some neighborhoods.
+
+- The chart shows ~46% of the neighborhood contributes ~81% of total market share.
+
+### Correlation (numeric-only)
+
+```{r}
+#| label: correlation
+cor_mat <- round(cor(raw_data_eng %>% select(where(is.numeric))), 2)
+
+cor_mat
+```
+##COrrelation for Sale Price 
+
+```{r}
+
+data_cor_sale_price <- raw_data_eng %>%
+  
+                  select(Sale_Price, total_SF, total_rooms, Total_Bsmt_SF, house_age )
+
+cor_sale_price <- cor(data_cor_sale_price)
+
+cor_sale_price
+
+
+```
+##Correlation visualization
+
+```{r}
+ggcorrplot(
+  cor_sale_price,
+  type = "lower",
+  lab = TRUE,
+  lab_size = 4,
+  colors = c("red", "white", "blue"),
+  outline.color = "white"
+)
+```
+Finding:
+
+1. Positive correlation: Sale price has strong positive relation with total sf and total Bsmt Sf 0.79 and 0.63.
+
+2. Weak correlation: The number of room have a very small correlation of 0.14. This indicates number of rooms doesn't influence housing price.
+
+3. Negative correlation: House age has moderate negative correlation of 0.56. This indicates the newer the houses are the more expensive.
+### Trend analysis (time series)
+
+```{r}
+#| label: trend_analysis
+trend_sale_price <- ggplot(raw_data_eng, aes(x= house_age, y= Sale_Price )) +
+  
+                    geom_point(color = "steelblue", alpha = 0.3) +
+  
+                    geom_smooth(method = "lm", color = "red") +
+  
+                    labs( title = "House Age and Price",
+                          
+                          x = "House Age",
+                          
+                          y= "Price"
+                          
+                          )
+
+trend_sale_price
+
+```
+Finding:
+
+- The regression line shows negative relation between house age and price.
+- Even if the line shows negative relation, it also shows a lot of variability which is a indication of some other factors influencing the price variable.
+# IV. Analyze (answer the questions)
+
+Use this section to directly answer 3–6 analysis questions that map to the purpose.
+
+## Analysis question 1
+
+**Question:** \What are the factors responsible for Housing prices in Iowa\
+
+**Method:** \Correlation analysis alongside scatter plots were used to find evidence.\
+
+**Answer:** \Biggest impact on sale price comes from total area, closely tied at 0.79 correlation. Basement area follow, linked at 0.63 - larger basements often mean cost goes up. Age goes other way, sitting at –0.56; older houses usually sell for less. Number of rooms barely moves the needle, just 0.14, so it tells us little about value.\
+
+```{r}
+#| label: analysis_q1
+
+cor_sale_price
+# Example placeholder:
+#total_metric <- sum(raw_data_eng$Sale_Condition, na.rm = TRUE)
+# total_metric
+
+```
+
+## Analysis question 2
+**Question:** \How does the overall quality influence the price?\
+
+**Method:** \Box plots were used to measure the impact   \
+
+**Answer:** \A very strong spread was seen around "Average", "Good", "Above Average". Most of the market share was concentrated around mid level houses. Even though there are involvement of expensive houses but there selling quantity is less and have a lower share of market share.\
+
+
+## Analysis question 3
+**Question:** \Impact of Neighborhood and House style on house prices?\
+
+**Method:** \Table, Box plot, bar plot, and pareto was used to collect evidence\
+
+**Answer:** \It turns out neighborhoods affects pricing patterns more than expected. What stands out is how just a few areas account for most transactions - this uneven spread shows the classic 80-20 rule(Pareto). Transactions are more clustered while others are not significant. Prices also shift noticeably across neighborhoods, with central spots shows higher volume.
+Apart from affecting prices, house design tends to shape the number of houses being sold. Most houses involve one story or two story, pointing to their widespread demand. Still, when it comes to cost, architectural type matters less than square footage or construction standard. \
+
+
+# V. Executive summary
+
+> Write this last. Keep it tight and decision-oriented.
+
+## Key Metrics
+
+-   **Key metric 1:** **Correlation between total square footage and sale price = 0.79**
+
+-   **Key metric 2:** **Correlation between house age and sale price = -0.56**
+
+## Key Take-Aways
+
+```{r}
+# READ THIS:
+# https://www.ncl.ac.uk/academic-skills-kit/study-skills/critical-thinking/using-evidence-to-support-your-argument/
+
+```
+
+
+-   \The larger the house the higher the sale price\ → \When buying or selling house the area of the house is prioritized\]
+
+-   \The better the quality the more the price is, but have low market share\ → \Mid level quality houses has more volume in market share and moderate prices\
+
+-   \Housing market is concentrated in certain percent of neighborhood\ → \ Location is a very important factor when it comes property investment and making pricing decision. \
+
+
+
+# VI. Communicate Findings
+
+## Key Findings
+
+1.  **\Total area is one of the most important factor on pricing\**
+
+    -   Evidence: Correlation between total square footage and sale price = 0.79 
+    -   Interpretation: Houses with big area are being sold on higher price, making size a driving factor.
+
+2.  **\House Quality highly influences the price but doesn't influence the market share\**
+
+    -   Evidence: Higher quality categories show higher median prices, while most sales occur in mid-level categories (Average, Good, Above Average).
+    -   Interpretation: Expensive houses do exist but they are not common, mid-quality houses has more market share and it highlights more demand.
+    
+3.  **\Neighborhood drives both the price and market share.\**
+
+    -   Evidence: Pareto shows that 43% of the neighborhood contributes 80% of the market share.
+    -   Interpretation: Certain location shows domination over the market, making location one of the important factor.
+## Assumptions 
+
+**\The data set accurately represents housing sales in Iowa\**
+
+**\The data set is not biased\**
+
+**\The trend and plots reflect real world regular market\**
+
+# VII. Take Action
+
+## Actions Plan
+
+**\Property should be evaluated on total square footage and overall quality when determining the price\**
+**\Mid-quality homes for higher demand. Good for fast revenue and faster transactions\**
+**\Prioritize high-activity neighborhoods like North Ames, College Creek, Northridge Height for investment \**
+**\Newer homes are better for higher resale value and better pricing potential\**
+
